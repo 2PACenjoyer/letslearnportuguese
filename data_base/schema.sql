@@ -7,6 +7,16 @@
 -- CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- ══════════════════════════
+-- TABELA: _migrations
+-- Rejestr wykonanych migracji
+-- ══════════════════════════
+CREATE TABLE IF NOT EXISTS _migrations (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT    NOT NULL UNIQUE,
+  applied_at TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+-- ══════════════════════════
 -- TABELA: users
 -- Profil użytkownika
 -- ══════════════════════════

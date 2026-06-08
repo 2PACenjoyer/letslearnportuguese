@@ -36,7 +36,8 @@ export function getXpPercent(xp) {
   if (!next) return 100;
   const range = next.xpRequired - current.xpRequired;
   const done  = xp - current.xpRequired;
-  return Math.round((done / range) * 100);
+  // Use floor (not round) and cap at 99 — bar hits 100% only at exact threshold
+  return Math.min(Math.floor((done / range) * 100), 99);
 }
 
 /**

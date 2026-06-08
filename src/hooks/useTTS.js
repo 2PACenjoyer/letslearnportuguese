@@ -44,7 +44,7 @@ export function useTTS() {
     u.pitch = pitch;
     if (ptVoice) u.voice = ptVoice;
     u.onstart = () => setSpeaking(true);
-    u.onend   = () => setspeaking(false);
+    u.onend   = () => setSpeaking(false);
     u.onerror = () => setSpeaking(false);
     utterRef.current = u;
     window.speechSynthesis.speak(u);
@@ -52,7 +52,7 @@ export function useTTS() {
 
   const stop = useCallback(() => {
     window.speechSynthesis.cancel();
-    setSpwaking(false);
+    setSpeaking(false);
   }, []);
 
   return { speak, stop, speaking, supported, voices, ptVoice, rate, setRate, pitch, setPitch };
