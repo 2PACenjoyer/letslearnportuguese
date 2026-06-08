@@ -1,0 +1,82 @@
+[
+  {
+    "id": "greeting",
+    "label": "Powitania",
+    "icon": "🤝",
+    "level": 1,
+    "category": "komunikacja",
+    "prompt": "Naucz mnie się przywitać jak lokalsi — powitania, pożegnania, zwroty grzecznościowe po europejsku. Oznacz każdą frazę znacznikiem {{PT:...}}"
+  },
+  {
+    "id": "numbers",
+    "label": "Liczby",
+    "icon": "🔢",
+    "level": 1,
+    "category": "podstawy",
+    "prompt": "Naucz mnie liczyć po portugalsku! Liczby 1-20 i jak się wymawia. Oznacz każdą liczbę {{PT:...}}"
+  },
+  {
+    "id": "cafe",
+    "label": "Kawiarnia",
+    "icon": "☕",
+    "level": 1,
+    "category": "codzienność",
+    "prompt": "Podstawowe zwroty w kawiarni i restauracji w Lizbonie — jak zamówić jak local. Oznacz każdą frazę {{PT:...}}"
+  },
+  {
+    "id": "direction",
+    "label": "Droga",
+    "icon": "🗺️",
+    "level": 2,
+    "category": "codzienność",
+    "prompt": "Jak pytać o drogę w Lizbonie i rozumieć odpowiedzi? Oznacz frazy {{PT:...}}"
+  },
+  {
+    "id": "slang",
+    "label": "Slang",
+    "icon": "😎",
+    "level": 3,
+    "category": "zaawansowane",
+    "prompt": "Naucz mnie slangu lizbońskiego — jak naprawdę mówią młodzi Portugalczycy. Oznacz każde słowo/zwrot {{PT:...}}"
+  },
+  {
+    "id": "diff",
+    "label": "EP vs BP",
+    "icon": "🇵🇹",
+    "level": 1,
+    "category": "teoria",
+    "prompt": "Najważniejsze różnice między portugalsim z Portugalii (EP) a brazylijskim (BP). Oznacz słowa {{PT:...}}"
+  },
+  {
+    "id": "test",
+    "label": "Test",
+    "icon": "📝",
+    "level": 1,
+    "category": "ćwiczenia",
+    "prompt": "Zrób mi krótki quiz/test z tego co już przerobiliśmy 📝"
+  },
+  {
+    "id": "grammar",
+    "label": "Gramatyka",
+    "icon": "📚",
+    "level": 2,
+    "category": "teoria",
+    "prompt": "Wytłumacz mi czas teraźniejszy (presente) w europejskim portugalskim z naturalnymi przykładami. Oznacz formy czasownika {{PT:...}}"
+  },
+  {
+    "id": "transport",
+    "label": "Transport",
+    "icon": "🚇",
+    "level": 2,
+    "category": "codzienność",
+    "prompt": "Słownictwo transportowe — metro, autocarro, comboio — jak podróżować po Lizbonie. Oznacz frazy {{PT:...}}"
+  },
+  {
+    "id": "shopping",
+    "label": "Zakupy",
+    "icon": "🛍️",
+    "level": 2,
+    "category": "codzienność",
+    "prompt": "Jak robić zakupy po portugalsku? Pytaj o cenę, rozmiar, kolor. Oznacz frazy {{PT:...}}"
+  }
+]

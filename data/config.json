@@ -1,0 +1,36 @@
+{
+  "app": {
+    "name": "ZÉCA",
+    "version": "2.0.0",
+    "description": "AI-powered agent do nauki europejskiego języka portugalskiego",
+    "targetLanguage": "pt-PT",
+    "instructionLanguage": "pl"
+  },
+  "api": {
+    "endpoint": "https://api.anthropic.com/v1/messages",
+    "model": "claude-sonnet-4-20250514",
+    "maxTokens": 1000
+  },
+  "storage": {
+    "progressKey": "zeca-progress-v2",
+    "settingsKey": "zeca-settings-v1",
+    "driver": "localStorage"
+  },
+  "xp": {
+    "perMessageMin": 10,
+    "perMessageMax": 25,
+    "bonusForTest": 50,
+    "sessionBonus": 5
+  },
+  "tts": {
+    "defaultRate": 0.82,
+    "defaultPitch": 1.0,
+    "preferredLang": "pt-PT",
+    "fallbackLang": "pt-BR"
+  },
+  "ui": {
+    "sidebarDefaultOpen": true,
+    "sidebarWidth": 196,
+    "messageMaxWidth": "76%"
+  }
+}

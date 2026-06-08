@@ -1,0 +1,74 @@
+[
+  {
+    "id": 1,
+    "name": "Nível 1",
+    "desc": "Przetrwanie",
+    "icon": "🌱",
+    "color": "#4ade80",
+    "glow": "#4ade8055",
+    "xpRequired": 0,
+    "xpToNext": 300,
+    "skills": [
+      "Powitania i pożegnania",
+      "Liczby 1–20",
+      "Kolory podstawowe",
+      "Zamówienie w kawiarni",
+      "Zwroty grzecznościowe",
+      "Przepraszam / Dziękuję / Proszę"
+    ]
+  },
+  {
+    "id": 2,
+    "name": "Nível 2",
+    "desc": "Codzienność",
+    "icon": "🏙️",
+    "color": "#60a5fa",
+    "glow": "#60a5fa55",
+    "xpRequired": 300,
+    "xpToNext": 500,
+    "skills": [
+      "Czas presente (teraźniejszy)",
+      "Pytania: onde, quando, quanto",
+      "Transport — metro, autocarro, comboio",
+      "Zakupy i ceny",
+      "Dni tygodnia i godziny",
+      "Rodzina i relacje"
+    ]
+  },
+  {
+    "id": 3,
+    "name": "Nível 3",
+    "desc": "Rozmowa",
+    "icon": "💬",
+    "color": "#c084fc",
+    "glow": "#c084fc55",
+    "xpRequired": 800,
+    "xpToNext": 1000,
+    "skills": [
+      "Pretérito perfeito (przeszłość prosta)",
+      "Pretérito imperfeito (przeszłość ciągła)",
+      "Wyrażanie opinii",
+      "Praca i codzienne życie",
+      "Uczucia i emocje",
+      "Negacja i pytania złożone"
+    ]
+  },
+  {
+    "id": 4,
+    "name": "Nível 4",
+    "desc": "Płynność",
+    "icon": "🎯",
+    "color": "#fbbf24",
+    "glow": "#fbbf2455",
+    "xpRequired": 1800,
+    "xpToNext": null,
+    "skills": [
+      "Tryb łączący — subjuntivo",
+      "Idiomy i wyrażenia idiomatyczne",
+      "Slang lisbonski — gíria",
+      "Humor i ironia po portugalsku",
+      "Rejestr formalny vs nieformalny",
+      "Rozumienie native speakerów"
+    ]
+  }
+]

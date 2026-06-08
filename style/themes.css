@@ -1,0 +1,144 @@
+/* ═══════════════════════════════════════════════════
+   ZÉCA — themes.css
+   Design tokens: kolory, fonty, spacing, shadows
+   Estetyka: Lisbon Art Nouveau × Azulejo × Fado
+   ═══════════════════════════════════════════════════ */
+
+:root {
+  /* ── Fonts ── */
+  --font-display: 'Cormorant Garamond', Georgia, serif;
+  --font-sans:    'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono:    'Fira Code', 'Cascadia Code', monospace;
+
+  /* ── Background layers ── */
+  --color-bg:           #030712;
+  --color-bg-mid:       #050d1a;
+  --color-bg-dark:      #020810;
+  --color-surface:      rgba(255, 255, 255, 0.04);
+  --color-surface-hover:rgba(255, 255, 255, 0.07);
+  --color-overlay:      rgba(3, 7, 18, 0.70);
+  --color-modal-bg:     rgba(3, 7, 18, 0.85);
+
+  /* ── Text ── */
+  --color-text-primary: #f5f0e8;
+  --color-text-secondary:#e2e8f0;
+  --color-text-muted:   #94a3b8;
+  --color-text-dim:     #64748b;
+  --color-text-ghost:   #475569;
+  --color-text-invisible:#334155;
+  --color-text-deep:    #1e3a5f;
+
+  /* ── Accent — Cobalt Blue (main) ── */
+  --color-accent-blue:        #60a5fa;
+  --color-accent-blue-bright: #93c5fd;
+  --color-accent-blue-dark:   #2563eb;
+  --color-accent-blue-deeper: #1d4ed8;
+  --color-accent-blue-glow:   rgba(96, 165, 250, 0.25);
+  --color-accent-blue-border: rgba(96, 165, 250, 0.15);
+  --color-accent-blue-bg:     rgba(96, 165, 250, 0.08);
+
+  /* ── Accent — Aged Gold ── */
+  --color-accent-gold:        #fbbf24;
+  --color-accent-gold-light:  #f5f0e8;
+  --color-accent-gold-dark:   #f59e0b;
+  --color-accent-gold-bg:     rgba(251, 191, 36, 0.08);
+  --color-accent-gold-border: rgba(251, 191, 36, 0.20);
+
+  /* ── Accent — Lisbon Terracotta ── */
+  --color-terracotta:        #92400e;
+  --color-terracotta-dark:   #7c3d12;
+  --color-terracotta-light:  #b45309;
+  --color-terracotta-border: rgba(251, 191, 36, 0.25);
+
+  /* ── Level colors ── */
+  --color-level-1: #4ade80;   /* zielony — Przetrwanie */
+  --color-level-2: #60a5fa;   /* niebieski — Codzienność */
+  --color-level-3: #c084fc;   /* fioletowy — Rozmowa */
+  --color-level-4: #fbbf24;   /* złoty — Płynność */
+
+  /* ── Semantic ── */
+  --color-success:        #4ade80;
+  --color-success-bg:     rgba(74, 222, 128, 0.08);
+  --color-success-border: rgba(74, 222, 128, 0.20);
+  --color-warning:        #fbbf24;
+  --color-warning-bg:     rgba(251, 191, 36, 0.06);
+  --color-warning-border: rgba(251, 191, 36, 0.20);
+  --color-danger:         #f87171;
+  --color-danger-bg:      rgba(239, 68, 68, 0.08);
+  --color-danger-border:  rgba(239, 68, 68, 0.20);
+
+  /* ── Borders ── */
+  --border-subtle:  1px solid rgba(255, 255, 255, 0.06);
+  --border-dim:     1px solid rgba(255, 255, 255, 0.08);
+  --border-blue:    1px solid rgba(96, 165, 250, 0.15);
+  --border-gold:    1px solid rgba(251, 191, 36, 0.20);
+
+  /* ── Radius ── */
+  --radius-sm:   8px;
+  --radius-md:   12px;
+  --radius-lg:   18px;
+  --radius-xl:   24px;
+  --radius-full: 9999px;
+
+  /* ── Shadows ── */
+  --shadow-sm:     0 2px 8px  rgba(0, 0, 0, 0.3);
+  --shadow-md:     0 4px 20px rgba(0, 0, 0, 0.4);
+  --shadow-lg:     0 8px 32px rgba(0, 0, 0, 0.5);
+  --shadow-xl:     0 24px 80px rgba(0, 0, 0, 0.6);
+  --shadow-blue:   0 4px 20px rgba(96, 165, 250, 0.25);
+  --shadow-gold:   0 4px 20px rgba(251, 191, 36, 0.35);
+  --shadow-btn:    0 8px 32px rgba(37, 99, 235, 0.45);
+  --shadow-btn-hover: 0 12px 40px rgba(37, 99, 235, 0.60);
+
+  /* ── Spacing ── */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* ── Transitions ── */
+  --transition-fast:   0.15s ease;
+  --transition-normal: 0.20s ease;
+  --transition-slow:   0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ── Z-index layers ── */
+  --z-sidebar:   10;
+  --z-header:    20;
+  --z-toast:    100;
+  --z-modal:    200;
+  --z-overlay:  300;
+
+  /* ── Azulejo grid (background pattern) ── */
+  --azulejo-line: rgba(96, 165, 250, 0.03);
+  --azulejo-size: 40px;
+}
+
+/* ── Background gradient helper ── */
+.zeca-bg {
+  background: linear-gradient(160deg, var(--color-bg) 0%, var(--color-bg-mid) 60%, var(--color-bg-dark) 100%);
+}
+
+/* ── Azulejo grid overlay ── */
+.azulejo-grid {
+  background-image:
+    linear-gradient(var(--azulejo-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--azulejo-line) 1px, transparent 1px);
+  background-size: var(--azulejo-size) var(--azulejo-size);
+}
+
+/* ── Glassmorphism surface ── */
+.glass {
+  background: var(--color-overlay);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.glass-surface {
+  background: var(--color-surface);
+  border: var(--border-subtle);
+}
