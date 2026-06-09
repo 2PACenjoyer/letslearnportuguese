@@ -1,1 +1,1 @@
-# letslearnportuguese
+# if you want to learn some portuguese from Portugal, you can try my open source learning agent
