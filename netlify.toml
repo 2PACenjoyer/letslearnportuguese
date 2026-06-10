@@ -1,0 +1,50 @@
+# ═══════════════════════════════════════════════════════
+# ZÉCA — netlify.toml
+# Konfiguracja Netlify dla repo: 2PACenjoyer/letslearnportuguese
+# ═══════════════════════════════════════════════════════
+
+[build]
+  # Netlify serwuje pliki z folderu /docs
+  publish = "docs"
+  # Brak kroku build — czyste HTML/CSS/JS, zero bundlera
+  command = ""
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# ── Nagłówki bezpieczeństwa ──────────────────────────────
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options         = "DENY"
+    X-Content-Type-Options  = "nosniff"
+    Referrer-Policy         = "strict-origin-when-cross-origin"
+    Permissions-Policy      = "microphone=(self), camera=()"
+
+# ── CORS dla Anthropic API (wymagane dla wywołań z przeglądarki) ──
+[[headers]]
+  for = "/docs/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+
+# ── Cache: pliki statyczne długo, HTML zawsze świeży ──────
+[[headers]]
+  for = "/style/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/data/*"
+  [headers.values]
+    Cache-Control = "public, max-age=3600"
+
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+# ── SPA redirect (na wypadek odświeżenia strony) ─────────
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200
