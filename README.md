@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # letslearnportuguese
 🇵🇹 ZÉCA — Open Source Portuguese Learning Agent
 Show Image
@@ -108,3 +109,6 @@ Co można ulepszyć
 
 📄 Licencja
 MIT — możesz używać, modyfikować i dystrybuować swobodnie.
+=======
+# if you want to learn some portuguese from Portugal, you can try my open source learning agent
+>>>>>>> 3daf1f1e4afd16dd83e56e348dc2d3649e7fd19f
