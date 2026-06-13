@@ -3,32 +3,429 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="ZÉCA — AI nauczyciel europejskiego języka portugalskiego z Lizbony" />
+  <meta name="description" content="ZÉCA — AI nauczyciel europejskiego języka portugalskiego z Lizbony. Darmowy, open-source." />
   <meta name="theme-color" content="#030712" />
+  <meta property="og:title"       content="ZÉCA — Nauczyciel Portugalskiego" />
+  <meta property="og:description" content="Ucz się europejskiego portugalskiego z AI nauczycielem z Lizbony." />
+  <meta property="og:type"        content="website" />
   <title>ZÉCA — Nauczyciel Portugalskiego</title>
-
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🇵🇹</text></svg>" />
-
+ 
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-
-  <!-- Stylesheets (ładowane w kolejności) -->
-  <link rel="stylesheet" href="./styles/global.css" />
-  <link rel="stylesheet" href="./styles/themes.css" />
-  <link rel="stylesheet" href="./styles/animations.css" />
-  <link rel="stylesheet" href="./styles/components.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+ 
+  <!-- Styles — kolejność ma znaczenie -->
+  <link rel="stylesheet" href="./style/global.css" />
+  <link rel="stylesheet" href="./style/themes.css" />
+  <link rel="stylesheet" href="./style/animations.css" />
+  <link rel="stylesheet" href="./style/components.css" />
 </head>
 <body>
   <div id="root"></div>
-
-  <noscript>
-    <div class="noscript-fallback">
-      <span class="noscript-flag">🇵🇹</span>
-      <h1>ZÉCA</h1>
-      <p>Włącz JavaScript żeby korzystać z aplikacji.</p>
-    </div>
-  </noscript>
+ 
+  <!--
+    ZÉCA — Open Source Portuguese Learning Agent
+    Repo: https://github.com/2PACenjoyer/letslearnportuguese
+    Licencja: MIT
+ 
+    Aplikacja używa:
+    - React 18 (przez CDN esm.sh — brak potrzeby bundlera)
+    - Anthropic Claude API (klucz wpisuje użytkownik)
+    - Web Speech API (wbudowane w przeglądarkę, bezpłatne)
+    - localStorage (postęp zapisywany lokalnie)
+  -->
+ 
+  <script type="module">
+    import { createElement as h, useState, useRef, useEffect, useCallback } from "https://esm.sh/react@18";
+    import { createRoot } from "https://esm.sh/react-dom@18/client";
+ 
+    // ── Wczytaj dane JSON ──────────────────────────────────────────
+    const [CONFIG, LEVELS_DATA, TOPICS_DATA, PROMPT_DATA] = await Promise.all([
+      fetch("./data/config.json").then(r => r.json()),
+      fetch("./data/levels.json").then(r => r.json()),
+      fetch("./data/topics.json").then(r => r.json()),
+      fetch("./data/system-prompt.json").then(r => r.json()),
+    ]);
+ 
+    const SYSTEM_PROMPT  = PROMPT_DATA.prompt;
+    const LEVELS         = LEVELS_DATA;
+    const TOPICS         = TOPICS_DATA;
+    const STORAGE_KEY    = CONFIG.storage.progressKey;
+    const API_ENDPOINT   = CONFIG.api.endpoint;
+    const API_MODEL      = CONFIG.api.model;
+    const API_MAX_TOKENS = CONFIG.api.maxTokens;
+ 
+    // ── storage ───────────────────────────────────────────────────
+    const loadProgress = () => { try { const r=localStorage.getItem(STORAGE_KEY); return r?JSON.parse(r):null; } catch{return null;} };
+    const saveProgress = d  => { try { localStorage.setItem(STORAGE_KEY,JSON.stringify(d)); } catch{} };
+    const loadApiKey   = () => localStorage.getItem("zeca-api-key") || "";
+    const saveApiKey   = k  => localStorage.setItem("zeca-api-key", k);
+ 
+    const DEFAULT_PROGRESS = { xp:0, totalMessages:0, sessions:0, streak:1, firstSessionDate:null, lastSessionDate:null };
+ 
+    // ── helpers ───────────────────────────────────────────────────
+    const getCurrentLevel = xp => [...LEVELS].reverse().find(l=>xp>=l.xpRequired)||LEVELS[0];
+    const getNextLevel    = xp => LEVELS.find(l=>l.xpRequired>xp)||null;
+    const getXpPct        = xp => { const c=getCurrentLevel(xp),n=getNextLevel(xp); if(!n)return 100; return Math.min(Math.floor((xp-c.xpRequired)/(n.xpRequired-c.xpRequired)*100),99); };
+    const fmtDate         = iso => iso ? new Date(iso).toLocaleDateString("pl-PL",{day:"numeric",month:"short",year:"numeric"}) : "—";
+ 
+    const PT_RE = /\{\{PT:\s*(.*?)\s*\}\}/g;
+    function parseMsg(text) {
+      const parts=[]; let last=0, m;
+      PT_RE.lastIndex=0;
+      while((m=PT_RE.exec(text))!==null){
+        if(m.index>last) parts.push({t:"text",c:text.slice(last,m.index)});
+        parts.push({t:"pt",c:m[1].trim()});
+        last=m.index+m[0].length;
+      }
+      if(last<text.length) parts.push({t:"text",c:text.slice(last)});
+      return parts;
+    }
+ 
+    // ── useTTS ────────────────────────────────────────────────────
+    function useTTS() {
+      const [speaking,setSpeaking]   = useState(false);
+      const [supported,setSupported] = useState(false);
+      const [ptVoice,setPtVoice]     = useState(null);
+      const [voices,setVoices]       = useState([]);
+      const [rate,setRate]           = useState(CONFIG.tts.defaultRate);
+      const [pitch,setPitch]         = useState(CONFIG.tts.defaultPitch);
+ 
+      useEffect(()=>{
+        if(!("speechSynthesis" in window)) return;
+        setSupported(true);
+        const load=()=>{
+          const all=window.speechSynthesis.getVoices(); setVoices(all);
+          const v=all.find(v=>v.lang==="pt-PT")||all.find(v=>v.lang.startsWith("pt")&&v.lang!=="pt-BR")||all.find(v=>v.lang==="pt-BR")||null;
+          setPtVoice(v);
+        };
+        load(); window.speechSynthesis.onvoiceschanged=load;
+        return ()=>window.speechSynthesis.cancel();
+      },[]);
+ 
+      const speak=useCallback((text)=>{
+        if(!supported) return;
+        window.speechSynthesis.cancel();
+        const u=new SpeechSynthesisUtterance(text);
+        u.lang=ptVoice?ptVoice.lang:"pt-PT"; u.rate=rate; u.pitch=pitch;
+        if(ptVoice) u.voice=ptVoice;
+        u.onstart=()=>setSpeaking(true); u.onend=()=>setSpeaking(false); u.onerror=()=>setSpeaking(false);
+        window.speechSynthesis.speak(u);
+      },[supported,ptVoice,rate,pitch]);
+ 
+      const stop=useCallback(()=>{ window.speechSynthesis.cancel(); setSpeaking(false); },[]);
+      return {speak,stop,speaking,supported,ptVoice,voices,rate,setRate,pitch,setPitch};
+    }
+ 
+    // ── ApiKeyModal ───────────────────────────────────────────────
+    function ApiKeyModal({onSave}) {
+      const [key,setKey]=useState(loadApiKey());
+      return h("div",{style:{position:"fixed",inset:0,background:"rgba(3,7,18,.92)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:16}},
+        h("div",{style:{background:"linear-gradient(160deg,#0c1a2e,#071022)",border:"1px solid rgba(96,165,250,.25)",borderRadius:24,padding:32,maxWidth:440,width:"100%"}},
+          h("div",{style:{fontSize:48,textAlign:"center",marginBottom:12}},"🔑"),
+          h("h2",{style:{color:"#f5f0e8",textAlign:"center",marginBottom:8,fontSize:20}},"Klucz API Anthropic"),
+          h("p",{style:{color:"#64748b",fontSize:13,textAlign:"center",marginBottom:20,lineHeight:1.6}},
+            "ZÉCA używa Claude API. Wpisz swój klucz — jest zapisywany tylko lokalnie w przeglądarce, nigdy nie opuszcza Twojego komputera.",
+          ),
+          h("div",{style:{marginBottom:12}},
+            h("input",{
+              type:"password", value:key, onChange:e=>setKey(e.target.value),
+              placeholder:"sk-ant-api03-...",
+              style:{width:"100%",background:"rgba(255,255,255,.06)",border:"1px solid rgba(96,165,250,.2)",borderRadius:10,padding:"10px 14px",color:"#e2e8f0",fontSize:14,outline:"none",boxSizing:"border-box"},
+              onKeyDown:e=>e.key==="Enter"&&key.startsWith("sk-")&&(saveApiKey(key),onSave(key)),
+            })
+          ),
+          h("p",{style:{color:"#475569",fontSize:11,marginBottom:20,textAlign:"center"}},
+            "Klucz znajdziesz na: ",
+            h("a",{href:"https://console.anthropic.com/",target:"_blank",style:{color:"#60a5fa"}},"console.anthropic.com"),
+          ),
+          h("button",{
+            onClick:()=>{ if(key.startsWith("sk-")){ saveApiKey(key); onSave(key); } },
+            disabled:!key.startsWith("sk-"),
+            style:{width:"100%",background:key.startsWith("sk-")?"linear-gradient(135deg,#1d4ed8,#3b82f6)":"rgba(255,255,255,.06)",color:key.startsWith("sk-")?"#f0f9ff":"#334155",border:"none",borderRadius:12,padding:"12px",fontSize:15,fontWeight:700,cursor:key.startsWith("sk-")?"pointer":"not-allowed"},
+          },"Zapisz i start 🚀"),
+          h("p",{style:{color:"#334155",fontSize:11,textAlign:"center",marginTop:12}},
+            "Open source · MIT · klucz tylko w localStorage",
+          ),
+        )
+      );
+    }
+ 
+    // ── Message ───────────────────────────────────────────────────
+    function PtChip({text,speak,active}){
+      const playing=active===text;
+      return h("span",{
+        style:{display:"inline-flex",alignItems:"center",gap:4,background:playing?"rgba(96,165,250,.22)":"rgba(96,165,250,.1)",border:`1px solid rgba(96,165,250,${playing?.5:.2})`,borderRadius:7,padding:"1px 7px 1px 5px",margin:"0 2px",verticalAlign:"middle",transition:"all .2s"},
+      },
+        h("button",{onClick:()=>speak(text),style:{background:"none",border:"none",cursor:"pointer",fontSize:12,padding:0,color:"#60a5fa",lineHeight:1}},"🔈"),
+        h("span",{style:{color:"#93c5fd",fontWeight:600,fontSize:13}}," "+text),
+      );
+    }
+ 
+    function Message({msg,idx,speak,active,tts}){
+      const isUser=msg.role==="user";
+      const [hov,setHov]=useState(false);
+      const parts=parseMsg(msg.content);
+      const ptPhrases=parts.filter(p=>p.t==="pt").map(p=>p.c);
+ 
+      return h("div",{
+        style:{display:"flex",justifyContent:isUser?"flex-end":"flex-start",marginBottom:14,alignItems:"flex-end",gap:9,animation:"zmsgIn .3s cubic-bezier(.34,1.56,.64,1) both",animationDelay:`${Math.min(idx*.04,.25)}s`},
+        onMouseEnter:()=>setHov(true), onMouseLeave:()=>setHov(false),
+      },
+        !isUser&&h("div",{style:{width:36,height:36,borderRadius:"50%",flexShrink:0,background:"linear-gradient(135deg,#1e3a5f,#2563eb)",border:"2px solid rgba(96,165,250,.4)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}},"🇵🇹"),
+        h("div",{style:{maxWidth:"76%"}},
+          h("div",{style:{background:isUser?"linear-gradient(135deg,#7c3d12,#92400e)":"linear-gradient(145deg,rgba(30,58,95,.7),rgba(15,30,55,.9))",color:"#f5f0e8",padding:"12px 16px",borderRadius:isUser?"20px 20px 4px 20px":"20px 20px 20px 4px",fontSize:14,lineHeight:1.75,border:isUser?"1px solid rgba(251,191,36,.2)":"1px solid rgba(96,165,250,.13)",whiteSpace:"pre-wrap",wordBreak:"break-word"}},
+            parts.map((p,i)=>p.t==="pt"?h(PtChip,{key:i,text:p.c,speak,active}):h("span",{key:i},p.c)),
+          ),
+          !isUser&&tts&&h("div",{style:{display:"flex",gap:5,marginTop:5,opacity:hov?1:0,transition:"opacity .2s",pointerEvents:hov?"auto":"none"}},
+            h("button",{onClick:()=>speak(ptPhrases.length?ptPhrases.join(". "):msg.content.replace(/\{\{PT:(.*?)\}\}/g,"$1")),style:{display:"flex",alignItems:"center",gap:4,background:"rgba(96,165,250,.1)",border:"1px solid rgba(96,165,250,.2)",color:"#60a5fa",borderRadius:7,padding:"3px 9px",fontSize:11,cursor:"pointer"}},"🔊 Odsłuchaj"),
+            ptPhrases.length>0&&h("span",{style:{color:"#1e3a5f",fontSize:10,alignSelf:"center"}},`${ptPhrases.length} frazy PT`),
+          ),
+        ),
+        isUser&&h("div",{style:{width:36,height:36,borderRadius:"50%",flexShrink:0,background:"linear-gradient(135deg,#7c3d12,#b45309)",border:"2px solid rgba(251,191,36,.3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}},"🧑"),
+      );
+    }
+ 
+    // ── App ───────────────────────────────────────────────────────
+    function App(){
+      const [apiKey,setApiKey]         = useState(loadApiKey());
+      const [screen,setScreen]         = useState("landing");
+      const [messages,setMessages]     = useState([]);
+      const [input,setInput]           = useState("");
+      const [loading,setLoading]       = useState(false);
+      const [showStats,setShowStats]   = useState(false);
+      const [showSidebar,setShowSidebar]=useState(true);
+      const [xpFlash,setXpFlash]       = useState(null);
+      const [saveFlash,setSaveFlash]   = useState(false);
+      const [activeSpeak,setActiveSpeak]=useState(null);
+      const [progress,setProgress]     = useState(()=>loadProgress()||{...DEFAULT_PROGRESS});
+      const bottomRef=useRef(null); const taRef=useRef(null);
+      const tts=useTTS();
+ 
+      const xp=progress.xp;
+      const curLvl=getCurrentLevel(xp); const nxtLvl=getNextLevel(xp); const xpPct=getXpPct(xp);
+ 
+      useEffect(()=>{ bottomRef.current?.scrollIntoView({behavior:"smooth"}); },[messages,loading]);
+ 
+      const speakPhrase=useCallback(text=>{
+        setActiveSpeak(text); tts.speak(text);
+        setTimeout(()=>setActiveSpeak(null),Math.max(2000,text.length*80));
+      },[tts]);
+ 
+      function bump(gain){
+        const now=new Date().toISOString();
+        setProgress(p=>{ const u={...p,xp:p.xp+gain,totalMessages:p.totalMessages+1,lastSessionDate:now,firstSessionDate:p.firstSessionDate||now}; saveProgress(u); return u; });
+        setXpFlash(`+${gain} XP`); setTimeout(()=>setXpFlash(null),1800);
+        setSaveFlash(true); setTimeout(()=>setSaveFlash(false),2000);
+      }
+ 
+      async function send(text){
+        if(!text.trim()||loading) return;
+        if(!apiKey){ alert("Wpisz klucz API Anthropic żeby używać ZÉCA."); return; }
+        const userMsg={role:"user",content:text};
+        const newMsgs=[...messages,userMsg];
+        setMessages(newMsgs); setInput(""); if(taRef.current) taRef.current.style.height="auto";
+        setLoading(true);
+        try{
+          const res=await fetch(API_ENDPOINT,{
+            method:"POST",
+            headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+            body:JSON.stringify({model:API_MODEL,max_tokens:API_MAX_TOKENS,system:SYSTEM_PROMPT,messages:newMsgs}),
+          });
+          if(!res.ok){ const e=await res.json(); throw new Error(e.error?.message||res.statusText); }
+          const data=await res.json();
+          const reply=data.content?.map(b=>b.text||"").join("")||"";
+          setMessages(p=>[...p,{role:"assistant",content:reply}]);
+          bump(Math.floor(Math.random()*15)+10);
+        }catch(e){
+          setMessages(p=>[...p,{role:"assistant",content:`❌ Błąd: ${e.message}`}]);
+        }
+        setLoading(false);
+      }
+ 
+      async function startSession(){
+        const now=new Date().toISOString();
+        setScreen("chat");
+        setProgress(p=>{ const u={...p,sessions:p.sessions+1,firstSessionDate:p.firstSessionDate||now,lastSessionDate:now}; saveProgress(u); return u; });
+        setLoading(true);
+        try{
+          const init={role:"user",content:"Witaj! Chcę się nauczyć portugalskiego z Portugalii. Zacznijmy! Oznaczaj frazy {{PT:...}}"};
+          const res=await fetch(API_ENDPOINT,{
+            method:"POST",
+            headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+            body:JSON.stringify({model:API_MODEL,max_tokens:API_MAX_TOKENS,system:SYSTEM_PROMPT,messages:[init]}),
+          });
+          if(!res.ok){ const e=await res.json(); throw new Error(e.error?.message||res.statusText); }
+          const data=await res.json();
+          const reply=data.content?.map(b=>b.text||"").join("")||"";
+          setMessages([init,{role:"assistant",content:reply}]);
+          if(xp===0) setProgress(p=>{ const u={...p,xp:10}; saveProgress(u); return u; });
+        }catch(e){
+          setMessages([{role:"assistant",content:`❌ ${e.message}`}]);
+        }
+        setLoading(false);
+      }
+ 
+      // Landing
+      if(screen==="landing") return h("div",{style:{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:20,background:"linear-gradient(160deg,#030712,#050d1a,#020810)",position:"relative",overflow:"hidden"}},
+        !apiKey&&h(ApiKeyModal,{onSave:k=>{ setApiKey(k); }}),
+        h("div",{style:{position:"absolute",top:"10%",left:"15%",width:400,height:400,borderRadius:"50%",background:"radial-gradient(ellipse,rgba(37,99,235,.1),transparent 70%)",filter:"blur(40px)",pointerEvents:"none"}}),
+        h("div",{style:{position:"absolute",inset:0,backgroundImage:"linear-gradient(rgba(96,165,250,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(96,165,250,.03) 1px,transparent 1px)",backgroundSize:"40px 40px",pointerEvents:"none"}}),
+        h("div",{style:{maxWidth:560,width:"100%",textAlign:"center",position:"relative",animation:"zlandIn .7s cubic-bezier(.16,1,.3,1) both"}},
+          h("div",{style:{fontSize:72,marginBottom:6,filter:"drop-shadow(0 0 24px rgba(96,165,250,.5))",animation:"zfloat 4s ease-in-out infinite"}},"🇵🇹"),
+          h("h1",{style:{fontSize:"clamp(3rem,9vw,5rem)",fontWeight:900,letterSpacing:"-3px",background:"linear-gradient(135deg,#fbbf24 0%,#f5f0e8 45%,#93c5fd 100%)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",lineHeight:1,margin:"0 0 6px"}},"ZÉCA"),
+          h("p",{style:{fontSize:13,letterSpacing:5,color:"#3b5268",textTransform:"uppercase",margin:"0 0 24px"}},"Open Source · Nauczyciel z Lizbony"),
+          h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:24}},
+            ...[["🗣️","Europejski PT","Akcent i wymowa jak locals"],["🔊","TTS Wymowa","Kliknij każdą frazę i odsłuchaj"],["📈","XP & Poziomy","4 poziomy od podstaw do płynności"],["💾","Auto-zapis","Postęp lokalnie w przeglądarce"]].map(([ic,ti,de])=>
+              h("div",{style:{background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.06)",borderRadius:16,padding:16,textAlign:"left"}},
+                h("div",{style:{fontSize:22,marginBottom:6}},ic),
+                h("div",{style:{color:"#e2e8f0",fontWeight:700,fontSize:13,marginBottom:4}},ti),
+                h("div",{style:{color:"#475569",fontSize:12,lineHeight:1.5}},de),
+              )
+            )
+          ),
+          progress.xp>0&&h("div",{style:{background:"rgba(37,99,235,.1)",border:"1px solid rgba(96,165,250,.2)",borderRadius:14,padding:"12px 18px",marginBottom:20,display:"flex",alignItems:"center",gap:12}},
+            h("span",{style:{fontSize:28}},curLvl.icon),
+            h("div",{style:{textAlign:"left"}},
+              h("div",{style:{color:"#93c5fd",fontWeight:700,fontSize:13}},"Kontynuujesz naukę!"),
+              h("div",{style:{color:"#475569",fontSize:12,marginTop:2}},`${xp} XP · ${progress.totalMessages} wiadomości · ${progress.sessions} sesji`),
+            ),
+          ),
+          h("button",{
+            onClick:()=>apiKey?startSession():null,
+            style:{background:"linear-gradient(135deg,#1d4ed8,#3b82f6)",color:"#f0f9ff",border:"none",borderRadius:18,padding:"16px 48px",fontSize:17,fontWeight:800,cursor:"pointer",boxShadow:"0 8px 32px rgba(37,99,235,.45)"},
+          },progress.xp>0?"Kontynuuj naukę 🚀":"Vamos começar! 🚀"),
+          h("p",{style:{color:"#1e3a5f",fontSize:11,marginTop:12}},"Open source MIT · ",h("a",{href:"https://github.com/2PACenjoyer/letslearnportuguese",target:"_blank",style:{color:"#334155"}},"GitHub")),
+        )
+      );
+ 
+      // Chat
+      return h("div",{style:{height:"100vh",display:"flex",flexDirection:"column",background:"linear-gradient(160deg,#030712,#050d1a,#020810)",color:"#f5f0e8",overflow:"hidden",position:"relative"}},
+        h("style",null,`@keyframes zmsgIn{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}} @keyframes zlandIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}} @keyframes zfloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}} @keyframes zdot{0%,60%,100%{transform:translateY(0);opacity:.5}30%{transform:translateY(-5px);opacity:1}} @keyframes zxpPop{0%{opacity:0;transform:translateY(6px) scale(.9)}15%{opacity:1;transform:translateY(0) scale(1.05)}70%{opacity:1}100%{opacity:0;transform:translateY(-8px)}}`),
+        // XP flash
+        xpFlash&&h("div",{style:{position:"fixed",top:66,right:14,zIndex:300,background:"linear-gradient(135deg,rgba(251,191,36,.95),rgba(245,158,11,.95))",color:"#1c1002",fontWeight:800,fontSize:13,borderRadius:10,padding:"5px 12px",animation:"zxpPop 1.8s ease forwards",pointerEvents:"none"}},xpFlash+" ✨"),
+        saveFlash&&h("div",{style:{position:"fixed",top:14,left:"50%",transform:"translateX(-50%)",background:"rgba(15,40,15,.95)",color:"#4ade80",border:"1px solid rgba(74,222,128,.3)",borderRadius:20,padding:"5px 14px",fontSize:11,fontWeight:600,zIndex:300,pointerEvents:"none"}},"💾 Zapisano"),
+        tts.speaking&&h("div",{style:{position:"fixed",bottom:86,right:14,zIndex:300,background:"rgba(37,99,235,.9)",color:"white",borderRadius:20,padding:"5px 12px",fontSize:11,fontWeight:600,display:"flex",alignItems:"center",gap:6}},
+          "🔊 Odtwarzanie PT",h("button",{onClick:tts.stop,style:{background:"rgba(255,255,255,.2)",border:"none",color:"white",borderRadius:5,padding:"1px 6px",fontSize:10,cursor:"pointer"}},"■"),
+        ),
+        // Header
+        h("div",{style:{display:"flex",alignItems:"center",gap:9,padding:"9px 14px",background:"rgba(3,7,18,.7)",backdropFilter:"blur(20px)",borderBottom:"1px solid rgba(96,165,250,.1)",flexShrink:0,zIndex:10}},
+          h("button",{onClick:()=>setShowSidebar(s=>!s),style:{width:30,height:30,borderRadius:8,cursor:"pointer",background:showSidebar?"rgba(96,165,250,.15)":"rgba(255,255,255,.05)",border:`1px solid ${showSidebar?"rgba(96,165,250,.3)":"rgba(255,255,255,.07)"}`,color:showSidebar?"#60a5fa":"#475569",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}},"☰"),
+          h("span",{style:{fontSize:20}},"🇵🇹"),
+          h("div",{style:{flex:1,minWidth:0}},
+            h("div",{style:{display:"flex",alignItems:"center",gap:7}},
+              h("span",{style:{fontWeight:900,fontSize:16,color:"#fbbf24",letterSpacing:1}},"ZÉCA"),
+              h("span",{style:{background:`${curLvl.color}18`,color:curLvl.color,border:`1px solid ${curLvl.color}40`,borderRadius:6,padding:"2px 7px",fontSize:10,fontWeight:700}},`${curLvl.icon} ${curLvl.name}`),
+            ),
+            h("div",{style:{marginTop:3,display:"flex",alignItems:"center",gap:7}},
+              h("div",{style:{flex:1,height:3,background:"rgba(255,255,255,.06)",borderRadius:2,overflow:"hidden",maxWidth:160}},
+                h("div",{style:{width:`${xpPct}%`,height:"100%",background:`linear-gradient(90deg,${curLvl.color},${curLvl.color}aa)`,borderRadius:2,transition:"width .6s"}}),
+              ),
+              h("span",{style:{color:"#94a3b8",fontSize:10}},`${xp} XP`),
+              nxtLvl&&h("span",{style:{color:"#334155",fontSize:9}},`→ ${nxtLvl.xpRequired-xp} do ${nxtLvl.name}`),
+            ),
+          ),
+          h("button",{onClick:()=>tts.supported&&(document.getElementById("tts-modal").style.display="flex"),title:"Głos TTS",style:{width:30,height:30,borderRadius:8,cursor:"pointer",background:"rgba(96,165,250,.1)",border:"1px solid rgba(96,165,250,.25)",color:"#60a5fa",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}},tts.speaking?"🔊":"🔈"),
+          h("button",{onClick:()=>setShowStats(true),style:{width:30,height:30,borderRadius:8,cursor:"pointer",background:"rgba(251,191,36,.08)",border:"1px solid rgba(251,191,36,.2)",color:"#fbbf24",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}},"📊"),
+          h("button",{onClick:()=>setScreen("landing"),style:{width:30,height:30,borderRadius:8,cursor:"pointer",background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.07)",color:"#475569",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"},title:"Landing"},"🏠"),
+        ),
+        // Body
+        h("div",{style:{flex:1,display:"flex",overflow:"hidden",zIndex:1}},
+          // Sidebar
+          h("div",{style:{width:showSidebar?192:0,flexShrink:0,overflow:"hidden",transition:"width .3s cubic-bezier(.4,0,.2,1)",borderRight:"1px solid rgba(96,165,250,.08)",background:"rgba(3,7,18,.5)"}},
+            h("div",{style:{width:192,padding:"12px 8px",height:"100%",overflowY:"auto",display:"flex",flexDirection:"column",gap:3}},
+              h("div",{style:{fontSize:9,letterSpacing:3,color:"#1e3a5f",textTransform:"uppercase",padding:"4px 8px",marginBottom:4}},"Tematy"),
+              ...TOPICS.map(t=>h("button",{key:t.id,onClick:()=>send(t.prompt),disabled:loading,style:{display:"flex",alignItems:"center",gap:7,padding:"8px 9px",background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.05)",borderRadius:10,cursor:loading?"not-allowed":"pointer",textAlign:"left",color:"#94a3b8",fontSize:11,transition:"all .15s",width:"100%"},onMouseEnter:e=>{if(!loading){e.currentTarget.style.background="rgba(96,165,250,.1)";e.currentTarget.style.color="#93c5fd";}},onMouseLeave:e=>{e.currentTarget.style.background="rgba(255,255,255,.03)";e.currentTarget.style.color="#94a3b8";}},
+                h("span",{style:{fontSize:15,flexShrink:0}},t.icon),
+                h("span",{style:{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},t.label),
+              )),
+            ),
+          ),
+          // Chat
+          h("div",{style:{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minWidth:0}},
+            h("div",{style:{flex:1,overflowY:"auto",padding:"16px 16px 8px"}},
+              messages.length===0&&!loading&&h("div",{style:{textAlign:"center",padding:"40px 16px",color:"#1e3a5f"}},
+                h("div",{style:{fontSize:36,marginBottom:10}},"🇵🇹"),
+                h("div",{style:{fontSize:13}},"Wybierz temat lub napisz coś..."),
+              ),
+              ...messages.map((msg,i)=>h(Message,{key:i,msg,idx:i,speak:speakPhrase,active:activeSpeak,tts:tts.supported})),
+              loading&&h("div",{style:{display:"flex",justifyContent:"flex-start",marginBottom:10,paddingLeft:46}},
+                h("div",{style:{display:"flex",alignItems:"center",gap:5,padding:"12px 16px",background:"rgba(96,165,250,.06)",border:"1px solid rgba(96,165,250,.1)",borderRadius:"18px 18px 18px 4px"}},
+                  ...[0,1,2].map(i=>h("div",{key:i,style:{width:7,height:7,borderRadius:"50%",background:"linear-gradient(135deg,#60a5fa,#93c5fd)",animation:"zdot 1.4s ease-in-out infinite",animationDelay:`${i*.18}s`}})),
+                ),
+              ),
+              h("div",{ref:bottomRef}),
+            ),
+            // Input
+            h("div",{style:{padding:"9px 14px 11px",background:"rgba(3,7,18,.6)",backdropFilter:"blur(20px)",borderTop:"1px solid rgba(96,165,250,.08)",flexShrink:0}},
+              h("div",{style:{display:"flex",gap:7,alignItems:"flex-end",background:"rgba(255,255,255,.04)",border:"1px solid rgba(96,165,250,.15)",borderRadius:16,padding:"9px 9px 9px 16px"}},
+                h("textarea",{ref:taRef,value:input,onChange:e=>setInput(e.target.value),onKeyDown:e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send(input);}},onInput:e=>{e.target.style.height="auto";e.target.style.height=Math.min(e.target.scrollHeight,110)+"px";},placeholder:"Napisz pytanie lub odpowiedź…",disabled:loading,rows:1,style:{flex:1,background:"transparent",border:"none",color:"#e2e8f0",fontSize:14,resize:"none",fontFamily:"inherit",lineHeight:1.6,maxHeight:110,overflow:"auto",outline:"none",caretColor:"#60a5fa"}}),
+                h("button",{onClick:()=>send(input),disabled:loading||!input.trim(),style:{width:38,height:38,borderRadius:11,flexShrink:0,background:input.trim()&&!loading?"linear-gradient(135deg,#1d4ed8,#3b82f6)":"rgba(255,255,255,.05)",border:input.trim()&&!loading?"1px solid rgba(96,165,250,.4)":"1px solid rgba(255,255,255,.06)",color:input.trim()&&!loading?"#f0f9ff":"#1e3a5f",cursor:input.trim()&&!loading?"pointer":"not-allowed",fontSize:17,display:"flex",alignItems:"center",justifyContent:"center"}},loading?"⏳":"➤"),
+              ),
+              h("p",{style:{textAlign:"center",marginTop:5,fontSize:9,color:"#1e3a5f"}},"Enter = wyślij · 🔈 kliknij frazę PT · postęp auto-zapisywany"),
+            ),
+          ),
+        ),
+        // Stats modal
+        showStats&&h("div",{style:{position:"fixed",inset:0,background:"rgba(3,7,18,.85)",backdropFilter:"blur(12px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:16},onClick:e=>e.target===e.currentTarget&&setShowStats(false)},
+          h("div",{style:{background:"linear-gradient(160deg,#0c1a2e,#071022)",border:"1px solid rgba(96,165,250,.2)",borderRadius:24,padding:26,maxWidth:400,width:"100%"}},
+            h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}},
+              h("div",null,h("div",{style:{fontSize:10,letterSpacing:3,color:"#60a5fa",textTransform:"uppercase",marginBottom:3}},"Estatísticas"),h("div",{style:{fontSize:18,fontWeight:800,color:"#f5f0e8"}},"Twój postęp")),
+              h("button",{onClick:()=>setShowStats(false),style:{width:32,height:32,borderRadius:"50%",background:"rgba(255,255,255,.06)",border:"1px solid rgba(255,255,255,.1)",color:"#94a3b8",fontSize:15,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}},"✕"),
+            ),
+            h("div",{style:{background:`${curLvl.color}15`,border:`1px solid ${curLvl.color}33`,borderRadius:14,padding:"14px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:12}},
+              h("span",{style:{fontSize:34}},curLvl.icon),
+              h("div",null,h("div",{style:{color:curLvl.color,fontWeight:800,fontSize:15}},`${curLvl.name} — ${curLvl.desc}`),h("div",{style:{color:"#64748b",fontSize:12,marginTop:2}},`${xp} XP`+(nxtLvl?` · do ${nxtLvl.name}: ${nxtLvl.xpRequired-xp} XP`:"")),),
+            ),
+            h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}},
+              ...[["💬",progress.totalMessages,"Wiadomości"],["📚",progress.sessions,"Sesje"],["📅",Math.max(1,Math.ceil((Date.now()-new Date(progress.firstSessionDate||Date.now()))/86400000)),"Dni"],["🔥",progress.streak||1,"Streak"]].map(([ic,val,lb])=>
+                h("div",{style:{background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.07)",borderRadius:12,padding:"12px 14px"}},
+                  h("div",{style:{fontSize:20}},ic),h("div",{style:{fontSize:22,fontWeight:800,color:"#f5f0e8",margin:"3px 0 2px"}},val),h("div",{style:{fontSize:10,color:"#64748b"}},lb),
+                )
+              ),
+            ),
+            h("div",{style:{display:"flex",gap:5,marginBottom:14}},
+              ...LEVELS.map(l=>{ const done=xp>=l.xpRequired; return h("div",{key:l.id,style:{flex:1,textAlign:"center",padding:"8px 4px",background:done?`${l.color}15`:"rgba(255,255,255,.02)",border:`1px solid ${done?l.color+"44":"rgba(255,255,255,.06)"}`,borderRadius:10}},h("div",{style:{fontSize:16,marginBottom:3}},done?"✅":"🔒"),h("div",{style:{color:done?l.color:"#374151",fontSize:9,fontWeight:700}},l.name)); })
+            ),
+            h("div",{style:{background:"rgba(255,255,255,.02)",borderRadius:10,padding:"8px 12px",fontSize:11,color:"#475569",marginBottom:14}},
+              h("div",null,"Pierwsza sesja: ",h("span",{style:{color:"#64748b"}},fmtDate(progress.firstSessionDate))),
+              h("div",{style:{marginTop:3}},"Ostatnia: ",h("span",{style:{color:"#64748b"}},fmtDate(progress.lastSessionDate))),
+            ),
+            h("button",{onClick:()=>{ if(window.confirm("Zresetować postęp?")){const f={...DEFAULT_PROGRESS};setProgress(f);saveProgress(f);setShowStats(false);}},style:{width:"100%",background:"rgba(239,68,68,.08)",color:"#f87171",border:"1px solid rgba(239,68,68,.2)",borderRadius:10,padding:"9px",fontSize:12,cursor:"pointer"}},"🗑️ Resetuj postęp"),
+          ),
+        ),
+        // TTS modal
+        h("div",{id:"tts-modal",style:{position:"fixed",inset:0,background:"rgba(3,7,18,.85)",backdropFilter:"blur(12px)",display:"none",alignItems:"center",justifyContent:"center",zIndex:200,padding:16},onClick:e=>e.target.id==="tts-modal"&&(document.getElementById("tts-modal").style.display="none")},
+          h("div",{style:{background:"linear-gradient(160deg,#0c1a2e,#071022)",border:"1px solid rgba(96,165,250,.2)",borderRadius:24,padding:26,maxWidth:380,width:"100%"}},
+            h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}},
+              h("div",{style:{fontSize:18,fontWeight:800,color:"#f5f0e8"}},"🔈 Ustawienia głosu"),
+              h("button",{onClick:()=>document.getElementById("tts-modal").style.display="none",style:{width:32,height:32,borderRadius:"50%",background:"rgba(255,255,255,.06)",border:"1px solid rgba(255,255,255,.1)",color:"#94a3b8",fontSize:15,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}},"✕"),
+            ),
+            h("div",{style:{background:"rgba(96,165,250,.08)",border:"1px solid rgba(96,165,250,.15)",borderRadius:12,padding:"12px 14px",marginBottom:14}},
+              tts.ptVoice?h("div",null,h("div",{style:{color:"#4ade80",fontSize:12,marginBottom:2}},"✅ Wykryto głos PT"),h("div",{style:{color:"#93c5fd",fontWeight:600,fontSize:13}},tts.ptVoice.name),h("div",{style:{color:"#475569",fontSize:11}},tts.ptVoice.lang)):
+              h("div",{style:{color:"#fbbf24",fontSize:12}},"⚠️ Brak głosu pt-PT — zainstaluj w ustawieniach systemu"),
+            ),
+            h("div",{style:{marginBottom:12}},
+              h("div",{style:{display:"flex",justifyContent:"space-between",marginBottom:5}},h("span",{style:{fontSize:12,color:"#64748b"}},"Tempo"),h("span",{style:{fontSize:12,color:"#60a5fa",fontWeight:700}},`${tts.rate.toFixed(2)}×`)),
+              h("input",{type:"range",min:.5,max:1.5,step:.05,value:tts.rate,onChange:e=>tts.setRate(parseFloat(e.target.value)),style:{width:"100%",accentColor:"#60a5fa"}}),
+            ),
+            h("div",{style:{marginBottom:16}},
+              h("div",{style:{display:"flex",justifyContent:"space-between",marginBottom:5}},h("span",{style:{fontSize:12,color:"#64748b"}},"Wysokość"),h("span",{style:{fontSize:12,color:"#60a5fa",fontWeight:700}},tts.pitch.toFixed(2))),
+              h("input",{type:"range",min:.5,max:2,step:.05,value:tts.pitch,onChange:e=>tts.setPitch(parseFloat(e.target.value)),style:{width:"100%",accentColor:"#60a5fa"}}),
+            ),
+            h("div",{style:{display:"flex",flexWrap:"wrap",gap:6}},
+              ...["Olá!","Bom dia!","Obrigado","De nada","Tudo bem?","Bué fixe!"].map(f=>
+                h("button",{key:f,onClick:()=>tts.speak(f),style:{background:"rgba(96,165,250,.1)",border:"1px solid rgba(96,165,250,.2)",color:"#93c5fd",borderRadius:7,padding:"4px 9px",fontSize:11,cursor:"pointer"}},f)
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+ 
+    createRoot(document.getElementById("root")).render(h(App, null));
+  </script>
 </body>
 </html>
